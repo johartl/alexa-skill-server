@@ -15,15 +15,18 @@ class Response {
         };
     }
 
-    say(text, ssml=false) {
-        this.response.outputSpeech = this.createOutputSpeech(text, ssml)
+    say(text) {
+        this.response.outputSpeech = this.createOutputSpeech(text);
+        return this;
     }
 
-    reprompt(text, ssml=false) {
-        this.response.reprompt.outputSpeech = this.createOutputSpeech(text, ssml);
+    reprompt(text) {
+        this.response.reprompt.outputSpeech = this.createOutputSpeech(text);
+        return this;
     }
 
-    createOutputSpeech(text, ssml=false) {
+    createOutputSpeech(text) {
+        const ssml = text.match(/^<speak>.*<\/speak>$/);
         return {
             type: ssml ? 'SSML' : 'PlainText',
             text: text
@@ -32,18 +35,22 @@ class Response {
 
     setSessionAttribute(key, value) {
         this.sessionAttributes[key] = value;
+        return this;
     }
 
     setCard(card) {
         this.response.card = card;
+        return this;
     }
 
     addDirective(directive) {
         this.response.directives.push(directive);
+        return this;
     }
 
     endSession() {
         this.response.shouldEndSession = true;
+        return this;
     }
 
     get() {
