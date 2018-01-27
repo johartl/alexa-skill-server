@@ -2,6 +2,7 @@ const express = require('express');
 const alexaVerifier = require('alexa-verifier-middleware');
 const winston = require('winston');
 const morgan = require('morgan');
+
 const configParams = require('./config');
 const Response = require('./response');
 
@@ -143,9 +144,9 @@ class AlexaSkillServer {
 
     sendResponse(res, response) {
         if (!response) {
-            return
+            res.close();
         } else if (response instanceof Response) {
-            res.json(response.get())
+            res.json(response.get());
         } else {
             res.json(response);
         }
@@ -154,7 +155,7 @@ class AlexaSkillServer {
     onLaunchRequest(request, session) {}
 
     onUnknownIntentRequest(request, session) {
-        this.logger.error(`Unknown intent ${request.intent.name}`);
+        this.logger.error(`Unknown intent '${request.intent.name}'`);
     }
 
     onIntentRequest(request) {
@@ -185,7 +186,7 @@ class AlexaSkillServer {
         this.logger.error(`Invalid request ${req.method} ${req.path}: ${JSON.stringify(req.body)}`);
     }
 
-    createResponse() {
+    respond() {
         return new Response(this.version);
     }
 
