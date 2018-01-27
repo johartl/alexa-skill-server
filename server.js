@@ -1,5 +1,7 @@
 const express = require('express');
 const alexaVerifier = require('alexa-verifier-middleware');
+const winston = require('winston');
+const morgan = require('morgan');
 const configParams = require('./config');
 const Response = require('./response');
 
@@ -16,7 +18,42 @@ class AlexaSkillServer {
             this.router.use(alexaVerifier);
         }
 
-        this.router.get(this.config.apiRootPath, this.onRequest);
+        // Set up logging
+        this.logger = this.createLogger();
+        const logStream = { write: (message, encoding) => this.logRequest(message) };
+        const requestLogger = morgan('short', {stream: logStream});
+        this.app.use(requestLogger);
+
+        // Set up paths
+        this.app.use(this.config.apiRootPath, this.router);
+        this.router.get('/', this.getServerInfo.bind(this));
+        this.router.post('/', this.onRequest.bind(this));
+    }
+
+    createLogger() {
+        const logger = new winston.Logger({
+            level: this.config.logLevel
+        });
+
+        logger.add(winston.transports.Console, {
+            handleExceptions: true,
+            humanReadableUnhandledException: true,
+            json: false,
+            timestamp: true,
+            colorize: true
+        });
+
+        logger.add(winston.transports.File, {
+            filename: this.config.logFile,
+            colorize: false,
+            json: false
+        });
+
+        return logger;
+    }
+
+    logRequest(message) {
+        this.logger.debug(message);
     }
 
     start() {
@@ -24,48 +61,50 @@ class AlexaSkillServer {
         const host = this.config.listenHost;
 
         const configStr = Object.keys(this.config).map(key => `${key}=${this.config[key]}`).join(' ');
-        console.log(`Config: ${configStr}`);
+        this.logger.info(`Config: ${configStr}`);
 
-        console.log('Starting server...');
+        this.logger.info('Starting server...');
         this.server = this.app.listen(port, host, () => {
-            console.log(`Server started listening on ${host}:${port}`);
+            this.logger.info(`Server started listening on ${host}:${port}`);
         });
 
         const stopSignals = ['SIGTERM', 'SIGINT'];
 
         stopSignals.forEach(signal => process.on(signal, () => {
-            console.log(`Received shutdown signal (${signal})`);
+            this.logger.info(`Received shutdown signal (${signal})`);
             this.stop();
         }));
     }
 
     stop() {
-        console.log('Stopping server...');
+        this.logger.info('Stopping server...');
         this.server.close(() => {
-            console.log('Server was stopped - Terminating process');
-            process.exit();
+            this.logger.info('Server was stopped - Terminating process');
+            setTimeout(() => process.exit()); // flush logging stream before exiting
         });
 
         setInterval(() => {
-            console.error('Unable to stop server - forcefully shutting down now');
-            process.exit();
+            this.logger.info('Unable to stop server - forcefully shutting down now');
+            setTimeout(() => process.exit()); // flush logging stream before exiting
         }, 3000);
     }
 
+    getServerInfo(req, res) {
+        res.send(`${this.constructor.name} running at version ${this.version}.`);
+    }
+
     onRequest(req, res) {
-        console.log(`Request: ${req.body}`);
-
-        const version = req.body.version;
-        const session = req.body.session;
-        const request = req.body.request;
-
         let response = null;
 
-        if (!version || !session || !request) {
+        if (!req.body || !req.body.version || !req.body.session|| !req.body.request) {
             response = this.onInvalidRequest(req);
             this.sendResponse(response);
             return;
         }
+
+        const version = req.body.version;
+        const session = req.body.session;
+        const request = req.body.request;
 
         if (!this.supportsApiVersion(version)) {
             response = this.onUnsupportedRequest(version);
@@ -103,7 +142,7 @@ class AlexaSkillServer {
     onLaunchRequest(request, session) {}
 
     onUnknownIntentRequest(request, session) {
-        console.error(`Unknown intent ${request.intent.name}`);
+        this.logger.error(`Unknown intent ${request.intent.name}`);
     }
 
     onIntentRequest(request) {
@@ -118,27 +157,27 @@ class AlexaSkillServer {
 
     onSessionEndedRequest(request, session) {
         if (request.reason === 'ERROR') {
-            console.error('Alexa ended the session due to an error');
+            this.logger.error('Alexa ended the session due to an error');
         }
     }
 
     onFallbackRequest(request, session) {
-        console.error(`Request type '${request.type}' not implemented`);
+        this.logger.error(`Request type '${request.type}' not implemented`);
     }
 
     onUnsupportedRequest(version) {
-        console.error(`Unsupported request of version '${version}'`);
+        this.logger.error(`Unsupported request of version '${version}'`);
     }
 
     onInvalidRequest(req) {
-        console.error('Invalid request');
+        this.logger.error('Invalid request');
     }
 
     createResponse() {
         return Response(this.version);
     }
 
-    supportsVersion(version) {
+    supportsApiVersion(version) {
         return version === this.version;
     }
 }
