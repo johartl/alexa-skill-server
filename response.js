@@ -42,8 +42,8 @@ class Response {
         this.response.directives.push(directive);
     }
 
-    setEndSession(endSession = true) {
-        this.response.shouldEndSession = endSession;
+    endSession() {
+        this.response.shouldEndSession = true;
     }
 
     get() {

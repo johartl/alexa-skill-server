@@ -15,13 +15,15 @@ class AlexaSkillServer {
         this.server = null;
 
         if (this.config.prodEnv) {
-            this.router.use(alexaVerifier);
+            this.app.use(alexaVerifier);
         }
+
+        // Parse body
+        this.app.use(express.json());
 
         // Set up logging
         this.logger = this.createLogger();
-        const logStream = { write: (message, encoding) => this.logRequest(message) };
-        const requestLogger = morgan('short', {stream: logStream});
+        const requestLogger = this.createRequestLogger();
         this.app.use(requestLogger);
 
         // Set up paths
@@ -50,6 +52,16 @@ class AlexaSkillServer {
         });
 
         return logger;
+    }
+
+    createRequestLogger() {
+        const logStream = { write: (message, encoding) => this.logRequest(message) };
+        let logFormat = ':method :url :status :res[content-length] - :response-time ms';
+        if (this.config.logRequestBody) {
+            morgan.token('body', (req, res) => req.body ? '\n' + JSON.stringify(req.body, undefined, 2) : '');
+            logFormat += ':body'
+        }
+        return morgan(logFormat, {stream: logStream});
     }
 
     logRequest(message) {
@@ -147,7 +159,7 @@ class AlexaSkillServer {
 
     onIntentRequest(request) {
         const intentName = request.intent.name;
-        const intentRequestHandler = this[`on${intentName}IntentRequest`];
+        const intentRequestHandler = this[`on${intentName}IntentRequest`].bind(this);
         if (typeof intentRequestHandler === 'function') {
             return intentRequestHandler(request);
         } else {
@@ -170,11 +182,11 @@ class AlexaSkillServer {
     }
 
     onInvalidRequest(req) {
-        this.logger.error('Invalid request');
+        this.logger.error(`Invalid request ${req.method} ${req.path}: ${JSON.stringify(req.body)}`);
     }
 
     createResponse() {
-        return Response(this.version);
+        return new Response(this.version);
     }
 
     supportsApiVersion(version) {
