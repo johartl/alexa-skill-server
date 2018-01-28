@@ -47,9 +47,12 @@ class AlexaSkillServer {
         });
 
         logger.add(winston.transports.File, {
+            handleExceptions: true,
+            humanReadableUnhandledException: true,
             filename: this.config.logFile,
-            colorize: false,
-            json: false
+            json: false,
+            timestamp: true,
+            colorize: false
         });
 
         return logger;
@@ -158,13 +161,13 @@ class AlexaSkillServer {
         this.logger.error(`Unknown intent '${request.intent.name}'`);
     }
 
-    onIntentRequest(request) {
+    onIntentRequest(request, session) {
         const intentName = request.intent.name;
         const intentRequestHandler = this[`on${intentName}IntentRequest`].bind(this);
         if (typeof intentRequestHandler === 'function') {
-            return intentRequestHandler(request);
+            return intentRequestHandler(request, session);
         } else {
-            return this.onUnknownIntentRequest(request);
+            return this.onUnknownIntentRequest(request, session);
         }
     }
 
