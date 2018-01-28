@@ -15,21 +15,22 @@ class AlexaSkillServer {
         this.router = express.Router();
         this.server = null;
 
-        if (this.config.prodEnv) {
-            this.app.use(alexaVerifier);
-        }
-
-        // Parse body
-        this.app.use(express.json());
-
         // Set up logging
         this.logger = this.createLogger();
         const requestLogger = this.createRequestLogger();
         this.app.use(requestLogger);
 
+        if (this.config.prodEnv) {
+            // Enable verification of Amazon certificates
+            this.router.use(alexaVerifier);
+        }
+
+        // Parse body
+        this.router.use(express.json());
+
         // Set up paths
+        this.app.get('/', this.getServerInfo.bind(this));
         this.app.use(this.config.apiRootPath, this.router);
-        this.router.get('/', this.getServerInfo.bind(this));
         this.router.post('/', this.onRequest.bind(this));
     }
 
@@ -62,7 +63,8 @@ class AlexaSkillServer {
         const logStream = { write: (message, encoding) => this.logRequest(message) };
         let logFormat = ':method :url :status :res[content-length] - :response-time ms';
         if (this.config.logRequestBody) {
-            morgan.token('body', (req, res) => req.body ? '\n' + JSON.stringify(req.body, undefined, 2) : '');
+            morgan.token('body', (req, res) => req.body && Object.keys(req.body).length ?
+                '\n' + JSON.stringify(req.body, undefined, 2) : '');
             logFormat += ':body'
         }
         return morgan(logFormat, {stream: logStream});
